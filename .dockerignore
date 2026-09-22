@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+dist
+build
+tests
+scripts
+Dockerfile
+.dockerignore
+.pre-commit-config.yaml

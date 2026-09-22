@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meter-driver-emulator"
+version = "0.1.0"
+description = "Pure-Python emulator of the Meter Driver Specification for development without meter hardware"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+# Deliberately empty: the emulator runs on the standard library alone, so a
+# developer can start it with nothing but a Python interpreter.
+dependencies = []
+
+[project.urls]
+Specification = "https://github.com/EarthSpark/meter-driver-spec"
+
+[project.scripts]
+meter-driver-emulator = "meter_driver_emulator.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+    "pydocstyle>=6.3.0",
+    "pre-commit>=4.6.2",
+    # Only scripts/sync_openapi.py needs a YAML parser, to convert the spec's
+    # OpenAPI document into the JSON the emulator serves.
+    "pyyaml>=6.0.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meter_driver_emulator"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["meter_driver_emulator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
