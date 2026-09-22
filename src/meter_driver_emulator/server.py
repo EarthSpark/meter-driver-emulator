@@ -56,6 +56,18 @@ class HttpError(Exception):
         self.close = close
 
 
+class BurstTolerantHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer with a listen backlog that survives a burst of clients.
+
+    socketserver's default request_queue_size is 5. The spec's HTTP contract
+    invites a client to open a connection per request, so a handful of
+    concurrent requests overruns that queue, and the kernel answers the
+    overflow by resetting connections instead of letting them be served.
+    """
+
+    request_queue_size = socket.SOMAXCONN
+
+
 class Emulator:
     """One emulator instance: state, event bus, heartbeat thread and HTTP server.
 
@@ -75,10 +87,12 @@ class Emulator:
         self._lifecycle_lock = threading.Lock()
         self._started = False
         self._shut_down = False
-        server_class = ThreadingHTTPServer
+        server_class = BurstTolerantHTTPServer
         if ":" in bind[0]:
             server_class = type(
-                "ThreadingHTTPServer6", (ThreadingHTTPServer,), {"address_family": socket.AF_INET6}
+                "BurstTolerantHTTPServer6",
+                (BurstTolerantHTTPServer,),
+                {"address_family": socket.AF_INET6},
             )
         self.server = server_class(bind, Handler)
         self.server.emulator = self

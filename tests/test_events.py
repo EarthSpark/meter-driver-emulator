@@ -1,5 +1,7 @@
 """The /v1/events stream: framing, initial message, fan-out, keep-alive, back-pressure."""
 
+import socket
+import socketserver
 import threading
 import time
 
@@ -92,6 +94,16 @@ def test_disconnected_subscriber_is_removed(client, subscribe, emulator):
 def test_shutdown_ends_open_streams(client, subscriber):
     client.post("/v1/shutdown")
     assert subscriber.closed.wait(timeout=5)
+
+
+def test_listen_backlog_survives_a_burst_of_connections(emulator):
+    """A client opens a connection per request, so the stdlib backlog of 5 is too small.
+
+    With it, concurrent requests overrun the accept queue and the kernel
+    resets the overflow instead of serving it.
+    """
+    assert type(emulator.server).request_queue_size == socket.SOMAXCONN
+    assert socket.SOMAXCONN > socketserver.TCPServer.request_queue_size
 
 
 def test_events_of_one_request_are_contiguous_under_concurrency(client, subscriber):
