@@ -1,5 +1,8 @@
 [build-system]
-requires = ["hatchling>=1.32.4"]
+# PyYAML is a build-time dependency only: hatch_build.py uses it to convert the
+# spec submodule's YAML into the JSON shipped as package data. The installed
+# emulator parses no YAML, so it stays free of runtime dependencies.
+requires = ["hatchling>=1.32.4", "pyyaml>=6.0.3"]
 build-backend = "hatchling.build"
 
 [project]
@@ -26,16 +29,30 @@ dev = [
     "ruff>=0.16.8",
     "pydocstyle>=6.3.0",
     "pre-commit>=4.6.2",
-    # Only scripts/sync_openapi.py needs a YAML parser, to convert the spec's
-    # OpenAPI document into the JSON the emulator serves.
+    # Both let the tests import hatch_build.py and run its conversion. The
+    # build itself gets them from [build-system] requires, not from here.
     "pyyaml>=6.0.3",
+    "hatchling>=1.32.4",
 ]
+
+# hatch_build.py writes src/meter_driver_emulator/openapi.json before each
+# build, for every target and for editable installs too.
+[tool.hatch.build.hooks.custom]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/meter_driver_emulator"]
+# The generated document is gitignored, so list it explicitly to include it.
+artifacts = ["src/meter_driver_emulator/openapi.json"]
+
+[tool.hatch.build.targets.sdist]
+# An sdist has no submodule, so it carries the generated document and the build
+# hook reuses it.
+artifacts = ["src/meter_driver_emulator/openapi.json"]
 
 [tool.ruff]
 line-length = 110
+# meter-driver-spec is a checkout of another repository, with its own style.
+extend-exclude = ["meter-driver-spec"]
 
 [tool.ruff.lint]
 select = ["F", "I"]

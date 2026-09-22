@@ -6,7 +6,10 @@ done.
 
 ## Steps
 
-- Fork the repository and clone your fork.
+- Fork the repository and clone your fork with `--recurse-submodules`, or run
+  `git submodule update --init` afterwards. The `meter-driver-spec` submodule
+  pins the spec release this emulator implements, and the build converts its
+  YAML into the package's `openapi.json`, so nothing builds without it.
 - Create a branch for your change.
 - Keep commits small and independently correct: each should pass the checks
   below on its own.

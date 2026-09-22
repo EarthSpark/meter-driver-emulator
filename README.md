@@ -11,29 +11,42 @@ meter, and each registered meter produces a synthetic reading every heartbeat
 period.
 
 The OpenAPI document it serves at `/openapi.json` is the specification's own,
-so the surface is exactly what the spec describes. This release tracks spec
-tag `v1.4.0`.
+so the surface is exactly what the spec describes. This release implements
+spec v1.4.0.
 
 ## Running it
 
-With [uv](https://docs.astral.sh/uv/):
+### With [uv](https://docs.astral.sh/uv/)
 
 ```sh
-uv run meter-driver-emulator                      # http://127.0.0.1:18080
+uvx --from git+https://github.com/EarthSpark/meter-driver-emulator \
+    meter-driver-emulator                    # http://127.0.0.1:18080
+```
+
+Append `@` and a branch, tag or commit to pin a revision:
+
+```sh
+uvx --from git+https://github.com/EarthSpark/meter-driver-emulator@v0.1.0 \
+    meter-driver-emulator
+```
+
+### With Docker
+
+```sh
+docker run --rm -p 18080:18080 ghcr.io/earthspark/meter-driver-emulator:main
+```
+
+Published for `linux/amd64` and `linux/arm64`. `main` follows the default
+branch, releases are tagged `v<version>`, and any build can be addressed as
+`sha-<commit>`.
+
+### From a clone
+
+```sh
+git clone --recurse-submodules https://github.com/EarthSpark/meter-driver-emulator.git
+cd meter-driver-emulator
 uv run meter-driver-emulator --bind 0.0.0.0:18080
-```
-
-With plain Python 3.14 or newer, no install:
-
-```sh
-PYTHONPATH=src python -m meter_driver_emulator
-```
-
-As a container:
-
-```sh
 docker build -t meter-driver-emulator .
-docker run --rm -p 18080:18080 meter-driver-emulator
 ```
 
 Options:
@@ -109,6 +122,8 @@ was read, and the set-config latency is zero.
 
 ## Development
 
+From a clone made as above:
+
 ```sh
 uv sync --group dev
 uv run pre-commit install
@@ -116,17 +131,45 @@ uv run pytest
 uv run ruff format . && uv run ruff check .
 ```
 
-The OpenAPI document under `src/meter_driver_emulator/openapi.json` is
-generated from the spec repository's YAML:
+On a clone made without `--recurse-submodules`, run `git submodule update
+--init` before anything else.
+
+After any build in the checkout, the emulator also runs on plain Python 3.14
+or newer with no dependencies:
 
 ```sh
-uv run scripts/sync_openapi.py ../meter-driver-spec/openapi/meter-driver.yaml
+PYTHONPATH=src python -m meter_driver_emulator
 ```
 
-When updating it, also update `SPEC_VERSION` in
-`src/meter_driver_emulator/__init__.py`; `uv run python scripts/check_openapi.py`
-fails when the two disagree, and CI runs it. The served document is this file
-with `info` and `x-meter-driver` replaced at request time; never hand-edit it.
+### The spec submodule
+
+`meter-driver-spec` pins the exact commit of the
+[Meter Driver Specification](https://github.com/EarthSpark/meter-driver-spec)
+this emulator implements, and is the only copy of the spec in the repository.
+
+The spec is authored as YAML. The emulator serves it at `/openapi.json` but
+declares no runtime dependencies, and the standard library has no YAML parser,
+so `hatch_build.py` converts the pinned YAML into
+`src/meter_driver_emulator/openapi.json` at build time and it ships as package
+data. That file is generated, gitignored and never committed: the spec is the
+source of truth, and this is a conversion of it.
+
+Because it is a build hook, it runs for `uv sync`, `uv build`, `pip install .`
+and the Docker build alike. To move to a new spec release, advance the
+submodule to that commit and rebuild:
+
+```sh
+uv sync --reinstall-package meter-driver-emulator
+```
+
+`SPEC_VERSION` is read out of the generated document at import time, so the
+spec version follows the submodule and is never written by hand. The document
+the emulator serves is that file with `info` and `x-meter-driver` replaced at
+request time.
+
+The container build is two stages. The first has the submodule and produces a
+wheel; the second installs only that wheel, so the spec is an input to the
+build and never part of the shipped image.
 
 The tests use only the standard library and pytest: `tests/conftest.py`
 starts an emulator on a free port and reads `/v1/events` with

@@ -1,0 +1,3 @@
+[submodule "meter-driver-spec"]
+	path = meter-driver-spec
+	url = https://github.com/EarthSpark/meter-driver-spec.git

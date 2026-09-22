@@ -19,11 +19,16 @@ env:
 permissions:
   contents: read
 
+# Every job checks out the meter-driver-spec submodule: the package's
+# openapi.json is generated from it by hatch_build.py, so any job that installs
+# or builds the package needs the spec present.
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv python install
       - run: uv sync --group dev
@@ -31,14 +36,13 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pydocstyle --ignore=D211,D403 src
         continue-on-error: true
-      # The committed OpenAPI document must be the conversion of the spec
-      # version the package declares, so a stale copy fails here.
-      - run: uv run python scripts/check_openapi.py
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv python install
       - run: uv sync --group dev
@@ -68,6 +72,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
       # GITHUB_REPOSITORY keeps the owner's capitalization; a registry
       # reference has to be lowercase.
       - name: Resolve image reference
