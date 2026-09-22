@@ -24,7 +24,7 @@ def parse_bind(text):
 
 
 def build_parser():
-    """The CLI: bind address, nominal conditions, log level, version."""
+    """Build the argument parser: bind address, nominal conditions, log level, version."""
     parser = argparse.ArgumentParser(
         prog="meter-driver-emulator",
         description="Meter Driver Specification emulator: a compliant HTTP+SSE driver with synthetic meters.",

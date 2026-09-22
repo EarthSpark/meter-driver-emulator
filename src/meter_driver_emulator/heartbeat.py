@@ -48,12 +48,22 @@ class Heartbeat:
             period = self.state.heartbeat_period_duration
             period_start = int(time.time())
             # wait() returns True only when restart() or stop() set the event;
-            # a None timeout idles until one of them does.
-            interrupted = self._wake.wait(period if period > 0 else None)
+            # a None timeout idles until one of them does. The timeout is
+            # clamped because Event.wait raises OverflowError above TIMEOUT_MAX.
+            timeout = min(period, threading.TIMEOUT_MAX) if period > 0 else None
+            interrupted = self._wake.wait(timeout)
             if interrupted:
                 self._wake.clear()
                 continue
-            period_end = int(time.time())
-            for event_type, data in self.state.heartbeat_cycle(period_start, period_end, period):
-                self.bus.publish(event_type, data)
-            log.debug("heartbeat cycle complete at %d", period_end)
+            # The wall clock may step backwards; a period must not.
+            period_end = max(period_start, int(time.time()))
+            try:
+                # The state lock is held across the cycle and its publication so
+                # request handlers cannot interleave their own events.
+                with self.state.lock:
+                    for event_type, data in self.state.heartbeat_cycle(period_start, period_end, period):
+                        self.bus.publish(event_type, data)
+            except Exception:
+                log.exception("heartbeat cycle failed; continuing")
+            else:
+                log.debug("heartbeat cycle complete at %d", period_end)

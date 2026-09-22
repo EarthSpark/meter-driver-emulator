@@ -12,6 +12,7 @@ Two outcomes, per the spec's rejection rule:
 """
 
 import json
+import math
 import re
 from dataclasses import dataclass
 
@@ -48,11 +49,19 @@ class BadRequest(Exception):
     error = "invalid_request"
 
 
+def _reject_constant(name):
+    # json.loads would otherwise accept NaN, Infinity and -Infinity, which
+    # are not JSON.
+    raise ValueError(f"{name} is not valid JSON")
+
+
 def parse_json_object(body):
     """Decode a request body that must be a JSON object."""
     try:
-        value = json.loads(body) if body else None
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        # ValueError also covers JSONDecodeError and the integer-string
+        # conversion limit exceeded by an enormous integer literal.
+        value = json.loads(body, parse_constant=_reject_constant) if body else None
+    except (UnicodeDecodeError, ValueError) as exc:
         raise BadRequest(f"body is not valid JSON: {exc}") from None
     if not isinstance(value, dict):
         raise BadRequest("body must be a JSON object")
@@ -108,7 +117,14 @@ def number(obj, field, required=True, default=None):
     value = obj[field]
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise BadRequest(f"'{field}' must be a number")
-    return float(value)
+    try:
+        result = float(value)
+    except OverflowError:
+        raise BadRequest(f"'{field}' is too large") from None
+    # A literal such as 1e999 parses to infinity.
+    if not math.isfinite(result):
+        raise BadRequest(f"'{field}' must be a finite number")
+    return result
 
 
 def boolean(obj, field, required=True, default=None):
@@ -236,8 +252,9 @@ def validate_register(body):
 class ConfigureRequest:
     """Validated configure-meter body, from either spec form.
 
-    `configuration` holds the six spec fields as received. `rejected` is set
-    when the body is well-formed but the driver will not apply it.
+    `configuration` holds the six spec fields as parsed: limits as floats,
+    unsigned fields as integers, unknown keys dropped. `rejected` is set when
+    the body is well-formed but the driver will not apply it.
     """
 
     node_id: int
@@ -246,14 +263,25 @@ class ConfigureRequest:
     rejected: bool
 
     def as_compat_request(self):
-        """The `ConfigureElectricalMeterCompatRequest` shape echoed in the invalid-configuration event."""
-        return {"node_id": self.node_id, "command": self.command, "configuration": self.configuration}
+        """Return the parsed node_id, command and configuration in the compat request shape.
+
+        This is what `invalid_electrical_meter_configuration` carries.
+        """
+        return {"node_id": self.node_id, "command": self.command, "configuration": dict(self.configuration)}
 
 
 def validate_configure(body, node_id=None):
-    """Validate a configure-meter body; `node_id` comes from the path unless it is in the body."""
+    """Validate a configure-meter body.
+
+    `node_id` is the path value for the path form and None for the body form.
+    In the path form a body `node_id` is allowed only when it equals the path.
+    """
     if node_id is None:
         node_id = uint64(body, "node_id")
+    elif "node_id" in body and body["node_id"] is not None:
+        body_node_id = uint64(body, "node_id")
+        if body_node_id != node_id:
+            raise BadRequest(f"node_id in body ({body_node_id}) does not match path ({node_id})")
     command = string(body, "command")
     raw = nested_object(body, "configuration")
     configuration = {}

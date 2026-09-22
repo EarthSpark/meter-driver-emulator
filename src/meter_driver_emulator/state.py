@@ -4,6 +4,7 @@ Mutating methods return the events to publish as `(type, data)` tuples in
 spec order; the caller publishes them. Nothing here touches the network.
 """
 
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -47,10 +48,22 @@ PHASED_FIELDS = (
 )
 
 
+def _parse_version(text):
+    """Read the leading major.minor.patch of a version string; anything after (rc1, +local) is ignored."""
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", text)
+    if match is None:
+        raise RuntimeError(f"__version__ {text!r} does not start with major.minor.patch")
+    return {"major": int(match[1]), "minor": int(match[2]), "patch": int(match[3])}
+
+
+# Resolved once at import so a malformed __version__ fails the process start
+# rather than the first meter registration.
+PACKAGE_VERSION = _parse_version(__version__)
+
+
 def package_version():
-    """The package version as a spec `Version` object."""
-    major, minor, patch = (int(part) for part in __version__.split(".")[:3])
-    return {"major": major, "minor": minor, "patch": patch}
+    """Return the package version as a spec `Version` object (a fresh copy)."""
+    return dict(PACKAGE_VERSION)
 
 
 def _zero_statistics():
@@ -114,6 +127,11 @@ class DriverState:
         self.total_packets_sent = 0
         self.total_packets_received = 0
 
+    @property
+    def lock(self):
+        """The reentrant lock guarding all state; callers hold it across a mutation and its publication."""
+        return self._lock
+
     # -- counters ---------------------------------------------------------
 
     def count_request(self):
@@ -124,7 +142,11 @@ class DriverState:
     # -- init -------------------------------------------------------------
 
     def init(self, heartbeat_period_duration, channel, aes_key, masked_aes_key):
-        """Reset runtime state and store the configuration; returns the init events."""
+        """Reset runtime state and store the configuration; returns the init events.
+
+        Clears every meter record. The request, message and packet counters
+        describe the process and persist across inits.
+        """
         with self._lock:
             self.meters.clear()
             self.heartbeat_period_duration = heartbeat_period_duration
@@ -210,7 +232,7 @@ class DriverState:
             return [("electrical_meter_balance_and_flags_accepted", {"node_id": node_id})]
 
     def registered_meters(self):
-        """Registered meters in node_id order."""
+        """Return the registered meters in node_id order."""
         with self._lock:
             return sorted((m for m in self.meters.values() if m.registered), key=lambda m: m.node_id)
 
