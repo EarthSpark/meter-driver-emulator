@@ -9,8 +9,10 @@ COPY src ./src
 RUN pip install --no-cache-dir . && rm -rf /app/src /app/pyproject.toml
 
 # The HTTP API and SSE stream. The bind address is fixed to every interface so
-# the port is reachable from outside the container; override the port by
-# passing --bind as the container command.
+# the port is reachable from outside the container. The port can be changed by
+# passing --bind as the container command, but the HEALTHCHECK below probes
+# 18080, so a different port also needs the healthcheck overridden
+# (docker run --health-cmd, or healthcheck: in compose).
 EXPOSE 18080
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18080/v1/healthz', timeout=2)"]

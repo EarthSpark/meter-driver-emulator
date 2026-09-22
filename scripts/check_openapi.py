@@ -1,5 +1,7 @@
-#!/usr/bin/env python3
-"""Fail when the committed openapi.json was converted from a different spec version than SPEC_VERSION."""
+"""Fail when the committed openapi.json was converted from a different spec version than SPEC_VERSION.
+
+Usage: uv run python scripts/check_openapi.py
+"""
 
 import json
 import sys
@@ -18,8 +20,17 @@ def main():
     if not OPENAPI.exists():
         print(f"{OPENAPI} is missing; run scripts/sync_openapi.py", file=sys.stderr)
         return 1
-    with OPENAPI.open(encoding="utf-8") as handle:
-        served_version = json.load(handle)["info"]["version"]
+    try:
+        with OPENAPI.open(encoding="utf-8") as handle:
+            document = json.load(handle)
+    except ValueError as exc:
+        print(f"{OPENAPI}: not valid JSON: {exc}", file=sys.stderr)
+        return 1
+    info = document.get("info") if isinstance(document, dict) else None
+    served_version = info.get("version") if isinstance(info, dict) else None
+    if not isinstance(served_version, str):
+        print(f"{OPENAPI}: info.version is missing; regenerate with scripts/sync_openapi.py", file=sys.stderr)
+        return 1
     if served_version != SPEC_VERSION:
         print(
             f"openapi.json info.version {served_version} does not match SPEC_VERSION {SPEC_VERSION}",
